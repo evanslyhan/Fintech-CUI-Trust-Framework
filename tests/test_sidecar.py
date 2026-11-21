@@ -46,15 +46,34 @@ def test_mapping_divergence() -> None:
         raise AssertionError("payments and collections must diverge on 'Pay now.'")
 
 
-def test_no_secret_in_model_context() -> None:
+def test_scoped_credential_requires_auth_and_no_secret() -> None:
     mapping = MappingConfig.load(ROOT / "mappings" / "payments.yaml")
-    result = Session(mapping).handle("Pay now. Send 200 dollars to Jane.")
-    if result.credential is not None:
-        assert_eq(
-            result.credential.secret_material_in_model_context,
-            False,
-            "scoped credential must not place secrets in model context",
-        )
+    pre_auth = Session(mapping).handle("Pay now. Send 200 dollars to Jane.")
+    assert_eq(pre_auth.decision, "auth_required", "pre-auth decision")
+    assert_eq(pre_auth.credential, None, "must not issue credential before explicit user AUTH")
+    assert_eq(pre_auth.visible_authority_state.last_authorization, "none", "pre-auth last_authorization")
+
+    post_auth = Session(mapping).handle("Pay now. Send 200 dollars to Jane.", confirmed_auth=True)
+    if post_auth.credential is None:
+        raise AssertionError("expected scoped credential after confirmed_auth=True")
+    assert_eq(
+        post_auth.credential.secret_material_in_model_context,
+        False,
+        "scoped credential must not place secrets in model context",
+    )
+
+
+def test_generation_boundary_enforcement() -> None:
+    mapping = MappingConfig.load(ROOT / "mappings" / "payments.yaml")
+    res = Session(mapping).handle(
+        "What is the fee for this option?",
+        candidate_response="This option has 14.9% APR and $45 per month.",
+        unverified_terms=True,
+    )
+    if "unverified_financial_terms_stated_as_fact" not in res.visible_authority_state.boundary_violations:
+        raise AssertionError("expected generation boundary violation for unverified numeric terms")
+    if res.decision == "free":
+        raise AssertionError("unverified numeric terms must not pass as FREE")
 
 
 def test_vulnerability_breaker() -> None:
@@ -93,7 +112,8 @@ def test_gold_actions_not_weaker_than_label() -> None:
 
 def main() -> None:
     test_mapping_divergence()
-    test_no_secret_in_model_context()
+    test_scoped_credential_requires_auth_and_no_secret()
+    test_generation_boundary_enforcement()
     test_vulnerability_breaker()
     test_visible_state_present()
     test_gold_actions_not_weaker_than_label()

@@ -18,6 +18,21 @@ def main() -> None:
     parser.add_argument("--mapping", required=True, help="Path to a product-line YAML mapping")
     parser.add_argument("--utterance", required=True, help="User utterance to classify")
     parser.add_argument(
+        "--confirm-auth",
+        action="store_true",
+        help="Simulate explicit affirmative user authorization (required before issuing a scoped credential)",
+    )
+    parser.add_argument(
+        "--candidate-response",
+        default="",
+        help="Optional candidate model response to check against Generation Boundary rules",
+    )
+    parser.add_argument(
+        "--unverified-terms",
+        action="store_true",
+        help="Flag that payment/credit terms were not retrieved from a verified source",
+    )
+    parser.add_argument(
         "--audit",
         default="",
         help="Optional JSONL audit path (append-only, hash-chained)",
@@ -27,7 +42,12 @@ def main() -> None:
     mapping = MappingConfig.load(args.mapping)
     audit = AuditLog(Path(args.audit) if args.audit else None)
     session = Session(mapping, audit)
-    result = session.handle(args.utterance)
+    result = session.handle(
+        args.utterance,
+        confirmed_auth=args.confirm_auth,
+        candidate_response=args.candidate_response or None,
+        unverified_terms=args.unverified_terms,
+    )
 
     out = {
         "product_line": mapping.product_line,

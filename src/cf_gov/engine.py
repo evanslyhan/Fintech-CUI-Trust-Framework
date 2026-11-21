@@ -1,4 +1,4 @@
-"""v0.4 control plane: classify → assure → decide → optional scoped credential → log."""
+"""v0.4 control plane: classify → assure → decide → generation boundary → post-AUTH scoped credential → log."""
 
 from __future__ import annotations
 
@@ -13,8 +13,66 @@ from typing import Any
 
 try:
     import yaml
-except ImportError as exc:  # pragma: no cover
-    raise SystemExit("PyYAML is required. Run: pip install -r requirements.txt") from exc
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore[assignment]
+
+
+def _parse_scalar(val: str) -> Any:
+    val = val.strip()
+    if not val or val == "[]":
+        return [] if val == "[]" else ""
+    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+        return val[1:-1]
+    low = val.lower()
+    if low in ("true", "enabled", "yes"):
+        return True
+    if low in ("false", "disabled", "no"):
+        return False
+    try:
+        return int(val) if "." not in val else float(val)
+    except ValueError:
+        return val
+
+
+def _load_yaml_text(text: str) -> dict[str, Any]:
+    if yaml is not None:
+        return yaml.safe_load(text) or {}
+    out: dict[str, Any] = {}
+    section: str | None = None
+    multiline_key: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line.strip()
+        if multiline_key is not None:
+            if indent > 0:
+                out[multiline_key] = (out.get(multiline_key, "") + " " + stripped).strip()
+                continue
+            multiline_key = None
+        if indent == 0 and ":" in stripped:
+            k, v = stripped.split(":", 1)
+            k, v = k.strip(), v.strip()
+            if v == ">":
+                multiline_key = k
+                out[k] = ""
+                section = None
+            elif v == "":
+                section = k
+                out[k] = {}
+            else:
+                section = None
+                out[k] = _parse_scalar(v)
+        elif indent > 0 and section is not None:
+            if stripped.startswith("- "):
+                if not isinstance(out[section], list):
+                    out[section] = []
+                out[section].append(_parse_scalar(stripped[2:]))
+            elif ":" in stripped and isinstance(out[section], dict):
+                k, v = stripped.split(":", 1)
+                out[section][k.strip()] = _parse_scalar(v)
+    return out
 
 FCR_ORDER = ("F0", "F1", "F2", "F3")
 RS_ORDER = ("R0", "R1", "R2", "R3")
@@ -77,11 +135,12 @@ class MappingConfig:
     vulnerability_detection: bool
     trajectory_window: int
     scoped_credential: dict[str, Any]
+    boundary_additions: list[str] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: str | Path) -> "MappingConfig":
-        data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        data = _load_yaml_text(Path(path).read_text(encoding="utf-8"))
         breaker = data.get("breaker_overrides") or {}
         return cls(
             product_line=str(data.get("product_line") or "unspecified"),
@@ -91,6 +150,7 @@ class MappingConfig:
             vulnerability_detection=bool(breaker.get("vulnerability_detection", True)),
             trajectory_window=int(breaker.get("trajectory_window") or 5),
             scoped_credential=data.get("scoped_credential") or {},
+            boundary_additions=list(data.get("boundary_additions") or []),
             raw=data,
         )
 
@@ -128,6 +188,7 @@ class VisibleAuthorityState:
     breaker_reason: str | None
     product_line: str
     classification_confidence: float
+    boundary_violations: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -141,12 +202,14 @@ class DecisionResult:
 
 # ---------------------------------------------------------------------------
 # Deterministic Lite classifier
-# This is a control-plane demo, not a production NLU model.
+# This is a control-plane reference implementation, not a statistical NLU model.
 # Gold-standard labels live in tests/classification/gold.jsonl.
 # ---------------------------------------------------------------------------
 
 _VULN = re.compile(
-    r"\b(can't pay|cannot pay|no money|desperate|scared|confused|i don't understand|help me)\b",
+    r"\b(can't pay|cannot pay|cannot afford|can't afford|no money|desperate|scared|"
+    r"confused|i don't understand|help me|overdraft|behind on bills|struggling to pay|"
+    r"financial distress)\b",
     re.I,
 )
 _REPRESENT = re.compile(
@@ -154,7 +217,8 @@ _REPRESENT = re.compile(
     re.I,
 )
 _TRANSACT = re.compile(
-    r"\b(pay now|charge|send .* now|transfer now|debit|disburse|buy now|renew now)\b",
+    r"\b(pay now|charge|send .* now|transfer now|debit|disburse|buy now|renew now|"
+    r"complete purchase|confirm payment|use the .* plan now)\b",
     re.I,
 )
 _COMMIT = re.compile(
@@ -162,7 +226,8 @@ _COMMIT = re.compile(
     re.I,
 )
 _ADVISE = re.compile(
-    r"\b(should i|should you|you should|i recommend|take the loan|pay off|borrow)\b",
+    r"\b(should i|should you|you should|i recommend|take the loan|pay off|borrow|"
+    r"which way to pay|how should i pay|best way to pay)\b",
     re.I,
 )
 _BINDING = re.compile(
@@ -170,11 +235,30 @@ _BINDING = re.compile(
     re.I,
 )
 _CONSIDER = re.compile(
-    r"\b(how much|fee|apr|premium|price|cost|rate)\b",
+    r"\b(how much|fee|apr|premium|price|cost|rate|installment|monthly payment)\b",
     re.I,
 )
 _REGULATED = re.compile(
-    r"\b(cancel|rights|terms|policy|coverage|interest|apr|loan|debt|collection)\b",
+    r"\b(cancel|rights|terms|policy|coverage|interest|apr|loan|debt|collection|bnpl)\b",
+    re.I,
+)
+
+# Section 5 Generation Boundary patterns (pre/post-generation enforcement)
+_BOUNDARY_COMMITMENT = re.compile(
+    r"\b(guaranteed approval|unconditional fee waiver|rate is locked at|guaranteed never to increase|"
+    r"i have switched your policy|your dispute is approved)\b",
+    re.I,
+)
+_BOUNDARY_COMPLIANCE_REP = re.compile(
+    r"\b(fully compliant with all state and federal laws|certified by the regulator|legally guaranteed)\b",
+    re.I,
+)
+_BOUNDARY_DISTRESS_UPSELL = re.compile(
+    r"\b(take out a new loan|finance this purchase anyway|split into easy payments|borrow more)\b",
+    re.I,
+)
+_BOUNDARY_NUMERIC_TERMS = re.compile(
+    r"\b(\d+(\.\d+)?%\s*apr|\$\d+(\.\d+)?\s*(per month|/mo|monthly|fee))\b",
     re.I,
 )
 
@@ -201,8 +285,7 @@ def classify_utterance(utterance: str) -> Classification:
         notes.append("commit_pattern")
     elif _ADVISE.search(text):
         action = "advise"
-        rs = max(rs, "R2", key=lambda x: _rank(RS_ORDER, x) if x in RS_ORDER else 0)
-        rs = "R2"
+        rs = _stricter_rs(rs, "R2")
         fcr = "F1"
         notes.append("advise_pattern")
     elif _CONSIDER.search(text):
@@ -239,6 +322,10 @@ def classify_utterance(utterance: str) -> Classification:
     )
 
 
+def _stricter_rs(a: str, b: str) -> str:
+    return a if _rank(RS_ORDER, a) >= _rank(RS_ORDER, b) else b
+
+
 def apply_assurance(c: Classification, floor: float) -> Classification:
     notes = list(c.notes)
     action = c.action
@@ -270,13 +357,39 @@ def apply_action_override(decision: str, action: str, mapping: MappingConfig) ->
     return _stricter_decision(decision, raised)
 
 
+def check_generation_boundary(
+    candidate_response: str,
+    classification: Classification,
+    *,
+    unverified_terms: bool = False,
+) -> list[str]:
+    """Section 5 Generation Boundary check on candidate model output before delivery."""
+    violations: list[str] = []
+    if not candidate_response:
+        return violations
+    if _BOUNDARY_COMMITMENT.search(candidate_response):
+        violations.append("prohibited_binding_commitment_or_completed_action")
+    if _BOUNDARY_COMPLIANCE_REP.search(candidate_response):
+        violations.append("prohibited_compliance_representation")
+    if unverified_terms and _BOUNDARY_NUMERIC_TERMS.search(candidate_response):
+        violations.append("unverified_financial_terms_stated_as_fact")
+    if "vulnerability_signal" in classification.notes and _BOUNDARY_DISTRESS_UPSELL.search(
+        candidate_response
+    ):
+        violations.append("credit_upsell_under_vulnerability_signal")
+    return violations
+
+
 def maybe_break(
     decision: str,
     classification: Classification,
     mapping: MappingConfig,
     session_auth_count: int,
+    boundary_violations: list[str] | None = None,
 ) -> tuple[str, str | None]:
     reason = None
+    if boundary_violations and "credit_upsell_under_vulnerability_signal" in boundary_violations:
+        return "breaker", "credit_upsell_under_vulnerability_signal"
     if mapping.vulnerability_detection and "vulnerability_signal" in classification.notes:
         if mapping.cumulative_trigger_limit <= 1 or classification.action in {
             "advise",
@@ -339,7 +452,14 @@ class Session:
         self.last_authorization = "none"
         self.audit = audit or AuditLog()
 
-    def handle(self, utterance: str) -> DecisionResult:
+    def handle(
+        self,
+        utterance: str,
+        *,
+        confirmed_auth: bool = False,
+        candidate_response: str | None = None,
+        unverified_terms: bool = False,
+    ) -> DecisionResult:
         raw = classify_utterance(utterance)
         assured = apply_assurance(raw, self.mapping.confidence_floor)
         decision = core_decision(assured.fcr, assured.rs)
@@ -348,31 +468,51 @@ class Session:
             if assured.action == "represent" or decision == "escalate":
                 decision = "escalate"
         decision = apply_action_override(decision, assured.action, self.mapping)
+
+        boundary_violations = check_generation_boundary(
+            candidate_response or "",
+            assured,
+            unverified_terms=unverified_terms,
+        )
+        if boundary_violations:
+            assured.notes.extend(f"boundary:{v}" for v in boundary_violations)
+            if "prohibited_compliance_representation" in boundary_violations:
+                decision = _stricter_decision(decision, "escalate")
+            else:
+                decision = _stricter_decision(decision, "auth_required")
+
         decision, breaker_reason = maybe_break(
-            decision, assured, self.mapping, self.auth_or_escalate_count
+            decision,
+            assured,
+            self.mapping,
+            self.auth_or_escalate_count,
+            boundary_violations=boundary_violations,
         )
 
         if decision in {"auth_required", "escalate"}:
             self.auth_or_escalate_count += 1
 
+        # Section 3A.4 & 3.3: Scoped credential is issued ONLY after explicit user AUTH confirmation.
         credential = None
         if (
             decision == "auth_required"
+            and confirmed_auth
             and assured.action in {"transact", "commit"}
             and self.mapping.scoped_credential.get("enabled")
         ):
             credential = issue_credential(self.session_id, self.mapping)
-
-        if decision == "auth_required":
             self.last_authorization = _iso(_utcnow())
 
         live = ["generate:inform"]
         if decision == "free":
             live = [f"generate:{assured.action}"]
         elif decision == "auth_required":
-            live = ["pending_authorization", f"action:{assured.action}"]
-            if credential:
-                live.append(f"credential:{credential.credential_id}")
+            if confirmed_auth:
+                live = [f"authorized:{assured.action}"]
+                if credential:
+                    live.append(f"credential:{credential.credential_id}")
+            else:
+                live = ["pending_authorization", f"action:{assured.action}"]
         elif decision == "escalate":
             live = ["human_or_sop"]
         else:
@@ -381,21 +521,25 @@ class Session:
         vas = VisibleAuthorityState(
             action=assured.action,
             fcr=assured.fcr,
-            rs=assured.rs,
+            rs=rs_val(assured.rs),
             decision=decision,
             live_permissions=live,
             last_authorization=self.last_authorization,
             breaker_reason=breaker_reason,
             product_line=self.mapping.product_line,
             classification_confidence=assured.confidence,
+            boundary_violations=boundary_violations,
         )
 
-        event_type = {
-            "free": "generation",
-            "auth_required": "authorization_request",
-            "escalate": "escalation",
-            "breaker": "circuit_breaker_activation",
-        }[decision]
+        if decision == "auth_required" and confirmed_auth and credential is not None:
+            event_type = "credential_issued"
+        else:
+            event_type = {
+                "free": "generation",
+                "auth_required": "authorization_request",
+                "escalate": "escalation",
+                "breaker": "circuit_breaker_activation",
+            }[decision]
 
         event = {
             "event_id": str(uuid.uuid4()),
@@ -410,14 +554,10 @@ class Session:
             },
             "action": assured.action,
             "classification_confidence": assured.confidence,
-            "trigger_decision": {
-                "free": "free",
-                "auth_required": "auth_required",
-                "escalate": "escalate",
-                "breaker": "breaker",
-            }[decision],
+            "trigger_decision": decision,
             "visible_authority_state": asdict(vas),
             "credential_id": credential.credential_id if credential else None,
+            "boundary_violations": boundary_violations,
             "notes": assured.notes,
             "compliance_mapping_id": self.mapping.product_line,
         }
@@ -429,3 +569,7 @@ class Session:
             credential=credential,
             event=logged,
         )
+
+
+def rs_val(rs: str) -> str:
+    return rs
