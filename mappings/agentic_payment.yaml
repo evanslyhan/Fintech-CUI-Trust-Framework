@@ -1,0 +1,45 @@
+# Product-line mapping: agentic payment & checkout decision governance
+# Not legal advice. Overlay on core Sections 3–6. MUST NOT lower a 3.2 cell.
+
+product_line: agentic_payment
+jurisdiction_id: us_consumer_checkout
+spec_version: "0.4"
+confidence_floor: 0.75
+
+scoped_credential:
+  enabled: true
+  single_use: true
+  ttl_minutes: 10
+  max_amount: 500
+  currency: USD
+  merchant_or_rail_scope: "single_checkout_order_only"
+
+action_overrides:
+  inform: inherit          # Verified term comparison only; unverified terms blocked by Generation Boundary
+  advise: raise_to_auth    # Payment-method recommendation (pay-in-full vs. BNPL/installment/wait) requires explicit context & AUTH
+  commit: raise_to_auth
+  transact: raise_to_auth  # Execution requires explicit user AUTH before issuing single-use Scoped Credential
+  represent: raise_to_escalate
+
+breaker_overrides:
+  cumulative_trigger_limit: 2
+  vulnerability_detection: enabled
+  trajectory_window: 4
+
+boundary_additions:
+  - "Stating unretrieved or unverified APR, fee, promotional deadline, or payment schedule from model memory"
+  - "Recommending financing or installment plans when the user expresses cash-flow strain, overdraft risk, or overlapping debt"
+  - "Framing lower monthly installment amounts as lower total purchase cost"
+  - "Executing checkout, credit application, or recurring payment authorization without explicit affirmative confirmation"
+
+retention_period_days: 2555
+audit_export_format: jsonl
+notification_requirements: []
+
+notes: >
+  Enforces dual-sided governance for agentic checkout: (1) Consumer financial
+  resilience — neutral comparison across pay-in-full, installment, waiting, or
+  declining purchase, with immediate circuit-breaker handoff back to the human
+  under financial stress or missing terms; (2) Enterprise lifecycle risk —
+  preventing short-term GMV optimization from routing financially stretched
+  users into high-delinquency credit obligations.

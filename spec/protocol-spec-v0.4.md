@@ -1,7 +1,7 @@
 # Conversational Finance Governance Framework — Specification v0.4
 
 **Status:** Draft  
-**Author:** Evans L. Han  
+**Author:** Lenyen Han  
 **License:** MIT  
 **Also referred to as:** An Open Governance Standard for Conversational Finance Agents  
 **Supersedes:** [v0.3](./protocol-spec-v0.3.md) for new implementations. v0.3 remains valid for existing Lite claims until v0.5.
@@ -313,6 +313,7 @@ v0.3 Section 8 remains normative. v0.4 mapping files SHALL additionally specify:
 
 Reference files:
 
+- [`../mappings/agentic_payment.yaml`](../mappings/agentic_payment.yaml)
 - [`../mappings/payments.yaml`](../mappings/payments.yaml)
 - [`../mappings/lending.yaml`](../mappings/lending.yaml)
 - [`../mappings/insurance.yaml`](../mappings/insurance.yaml)
@@ -348,6 +349,7 @@ A Lite sidecar demonstrating the control plane — no LLM required — is mainta
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v0.4-AP | 2026-11-21 | [Agentic Payment & Lifecycle Resilience extension](./agentic-payment-extension.md); post-AUTH scoped credential enforcement; Generation Boundary runtime checks; `agentic_payment.yaml` mapping |
 | v0.4 | 2026-09-10 | Action Object; Classification Assurance; Scoped Credential; Visible Authority State; product-line mapping examples; Lite sidecar |
 | v0.3 | 2026-07-07 | Renamed Insurance Fuse → Authority Circuit Breaker; aligned five-layer names |
 | v0.2 | 2026-05-25 | Added Insurance Fuse mechanism |

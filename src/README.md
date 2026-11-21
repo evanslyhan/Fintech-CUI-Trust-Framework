@@ -1,54 +1,51 @@
-# Reference Implementation — Lite sidecar
+# Reference Implementation — Deterministic Control-Plane & Schema Validator
 
-**Status:** v0.4 Lite control plane (no LLM)  
+**Status:** v0.4 / v0.4-AP Lite control plane (zero external LLM dependency)  
 **License:** MIT
 
-This directory contains a deployable **control-plane sidecar** for specification [v0.4](../spec/protocol-spec-v0.4.md). It sits conceptually between a conversational agent and an LLM. This Lite build classifies an utterance, binds an Action Object, applies a product-line mapping, optionally issues a scoped credential record, writes a hash-chained JSONL audit event, and prints Visible Authority State.
+This directory contains a zero-dependency **deterministic control-plane and audit-schema validator** for specification [v0.4](../spec/protocol-spec-v0.4.md) and the [Agentic Payment & Lifecycle Resilience Extension (v0.4-AP)](../spec/agentic-payment-extension.md). It sits conceptually between a conversational agent and an LLM. This validator classifies an utterance, binds an Action Object, applies a product-line mapping, enforces Section 5 Generation Boundary checks on candidate outputs, issues a single-use scoped credential record strictly **after** explicit user authorization (`--confirm-auth`), writes a hash-chained JSONL audit event, and prints Visible Authority State.
 
-It is not the sole compliant instantiation. It does not call a model. It does not move money.
+It is a protocol state-machine reference validator, not a commercial NLU model or payment processor.
 
 ## Run
 
 ```bash
-cd src
-python3 -m pip install -r requirements.txt
-python3 -m cf_gov.sidecar --mapping ../mappings/payments.yaml --utterance "What's the fee for sending 200 dollars?"
-python3 -m cf_gov.sidecar --mapping ../mappings/lending.yaml --utterance "Should I take the loan?"
-python3 -m cf_gov.sidecar --mapping ../mappings/insurance.yaml --utterance "Is this claim fully covered by my plan?"
-python3 -m cf_gov.sidecar --mapping ../mappings/collections.yaml --utterance "Pay now."
+# Run from repository root (no third-party packages required)
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/agentic_payment.yaml --utterance "What is the monthly cost for the installment plan?" --candidate-response "You can pay $45 per month at 14.9% APR." --unverified-terms
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/agentic_payment.yaml --utterance "I am behind on bills and worried about overdraft. Should I borrow with BNPL?"
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/payments.yaml --utterance "Pay now. Send 200 dollars to Jane."
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/payments.yaml --utterance "Pay now. Send 200 dollars to Jane." --confirm-auth
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/lending.yaml --utterance "Should I take the loan?"
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/insurance.yaml --utterance "Is this claim fully covered by my plan?"
+PYTHONPATH=src python3 -m cf_gov.sidecar --mapping mappings/collections.yaml --utterance "Pay now."
 ```
 
 Optional audit file:
 
 ```bash
-python3 -m cf_gov.sidecar \
-  --mapping ../mappings/payments.yaml \
+PYTHONPATH=src python3 -m cf_gov.sidecar \
+  --mapping mappings/payments.yaml \
   --utterance "Pay now. Send 200 dollars to Jane." \
+  --confirm-auth \
   --audit /tmp/cf-gov-audit.jsonl
 ```
 
-Tests from repository root:
+Conformance tests from repository root:
 
 ```bash
 python3 tests/test_sidecar.py
 ```
 
-## What this sidecar enforces
+## What this validator enforces
 
-- `(FCR, RS, Action)` tuple before any "generation" decision
+- `(FCR, RS, Action)` tuple bound before any generation or execution decision
 - Classification Assurance (`confidence_floor` from the mapping)
-- Section 3.2 FREE / AUTH / ESCALATE table
-- Product-line action overrides (payments vs lending vs insurance vs collections)
-- Scoped credential **record** with `secret_material_in_model_context=false`
+- Section 3.2 FREE / AUTH / ESCALATE decision table
+- Product-line action overrides (`agentic_payment`, `payments`, `lending`, `insurance`, `collections`)
+- Section 5 Generation Boundary checks (blocking unverified financial terms stated as fact, prohibited commitments, and credit upsells under financial-distress signals)
+- Post-AUTH single-use Scoped Credential issuance with `secret_material_in_model_context=false`
 - Visible Authority State in the JSON output
-- Append-only hash-chained JSONL when `--audit` is set
-
-## What this sidecar does not do
-
-- Call an LLM
-- Perform real payments
-- Replace a production intent model (the classifier is deterministic and pattern-based, for protocol demonstration)
-- Implement a human operator console
+- Append-only SHA-256 hash-chained JSONL when `--audit` is set
 
 ## Layout
 
@@ -57,6 +54,6 @@ src/
   requirements.txt
   cf_gov/
     __init__.py
-    engine.py      ← control plane
+    engine.py      ← control plane & generation boundary validator
     sidecar.py     ← CLI
 ```

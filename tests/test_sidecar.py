@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lite tests for the v0.4 control plane. Run from repository root:
+"""Conformance tests for the v0.4 control plane. Run from repository root:
 
     python3 tests/test_sidecar.py
 """
@@ -64,7 +64,7 @@ def test_scoped_credential_requires_auth_and_no_secret() -> None:
 
 
 def test_generation_boundary_enforcement() -> None:
-    mapping = MappingConfig.load(ROOT / "mappings" / "payments.yaml")
+    mapping = MappingConfig.load(ROOT / "mappings" / "agentic_payment.yaml")
     res = Session(mapping).handle(
         "What is the fee for this option?",
         candidate_response="This option has 14.9% APR and $45 per month.",
@@ -74,6 +74,15 @@ def test_generation_boundary_enforcement() -> None:
         raise AssertionError("expected generation boundary violation for unverified numeric terms")
     if res.decision == "free":
         raise AssertionError("unverified numeric terms must not pass as FREE")
+
+
+def test_agentic_payment_resilience_breaker() -> None:
+    mapping = MappingConfig.load(ROOT / "mappings" / "agentic_payment.yaml")
+    res = Session(mapping).handle(
+        "I am behind on bills and worried about overdraft. Should I borrow with BNPL?"
+    )
+    assert_eq(res.decision, "breaker", "financial distress during payment advice must fire circuit breaker")
+    assert_eq(res.visible_authority_state.breaker_reason, "vulnerability_signal", "breaker reason")
 
 
 def test_vulnerability_breaker() -> None:
@@ -114,6 +123,7 @@ def main() -> None:
     test_mapping_divergence()
     test_scoped_credential_requires_auth_and_no_secret()
     test_generation_boundary_enforcement()
+    test_agentic_payment_resilience_breaker()
     test_vulnerability_breaker()
     test_visible_state_present()
     test_gold_actions_not_weaker_than_label()

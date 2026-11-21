@@ -1,7 +1,7 @@
 # Conversational Finance Governance Framework — Specification v0.3
 
 **Status:** Draft
-**Author:** Evans L. Han
+**Author:** Lenyen Han
 **License:** MIT
 **Also referred to as:** An Open Governance Standard for Conversational Finance Agents
 
