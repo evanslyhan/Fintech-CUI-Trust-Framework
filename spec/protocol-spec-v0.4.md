@@ -318,6 +318,10 @@ Reference files:
 - [`../mappings/lending.yaml`](../mappings/lending.yaml)
 - [`../mappings/insurance.yaml`](../mappings/insurance.yaml)
 - [`../mappings/collections.yaml`](../mappings/collections.yaml)
+- [`../mappings/us_reg_z_credit.yaml`](../mappings/us_reg_z_credit.yaml)
+- [`../mappings/us_reg_e_eft.yaml`](../mappings/us_reg_e_eft.yaml)
+- [`../mappings/us_fcra_credit_reporting.yaml`](../mappings/us_fcra_credit_reporting.yaml)
+- [`../mappings/us_state_insurance.yaml`](../mappings/us_state_insurance.yaml)
 
 These are starting points. They do not constitute legal advice.
 
@@ -349,6 +353,7 @@ A Lite sidecar demonstrating the control plane — no LLM required — is mainta
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.0.0 | 2026-11-24 | [U.S. Regulatory Mapping Reference](./us-regulatory-mapping.md) & executable mappings for Reg Z, Reg E, FCRA, and State Insurance (CA/NY/TX) |
 | v0.4-AP | 2026-11-21 | [Agentic Payment & Lifecycle Resilience extension](./agentic-payment-extension.md); post-AUTH scoped credential enforcement; Generation Boundary runtime checks; `agentic_payment.yaml` mapping |
 | v0.4 | 2026-09-10 | Action Object; Classification Assurance; Scoped Credential; Visible Authority State; product-line mapping examples; Lite sidecar |
 | v0.3 | 2026-07-07 | Renamed Insurance Fuse → Authority Circuit Breaker; aligned five-layer names |

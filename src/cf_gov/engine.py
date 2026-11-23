@@ -212,6 +212,12 @@ _VULN = re.compile(
     r"financial distress)\b",
     re.I,
 )
+_STATUTORY_BREAKER = re.compile(
+    r"\b(waive .* rescission|shorten .* rescission|skip .* disclosure|"
+    r"cancel .* dispute|withdraw .* error claim|below .* minimum coverage|"
+    r"reduce coverage below)\b",
+    re.I,
+)
 _REPRESENT = re.compile(
     r"\b(compliant|compliance|covered by|fully covered|legal|regulator|approved)\b",
     re.I,
@@ -308,6 +314,11 @@ def classify_utterance(utterance: str) -> Classification:
         notes.append("vulnerability_signal")
         confidence = min(confidence, 0.55)
 
+    if _STATUTORY_BREAKER.search(text):
+        notes.append("statutory_protection_breaker_signal")
+        rs = _stricter_rs(rs, "R3")
+        action = _stricter_action(action, "represent")
+
     if not notes:
         confidence = 0.90
 
@@ -390,6 +401,8 @@ def maybe_break(
     reason = None
     if boundary_violations and "credit_upsell_under_vulnerability_signal" in boundary_violations:
         return "breaker", "credit_upsell_under_vulnerability_signal"
+    if "statutory_protection_breaker_signal" in classification.notes:
+        return "breaker", "statutory_protection_breaker_signal"
     if mapping.vulnerability_detection and "vulnerability_signal" in classification.notes:
         if mapping.cumulative_trigger_limit <= 1 or classification.action in {
             "advise",

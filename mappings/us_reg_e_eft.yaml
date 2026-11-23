@@ -1,0 +1,44 @@
+# U.S. Regulatory Mapping: Electronic Fund Transfer Act (EFTA) / Regulation E (12 CFR Part 1005)
+# Illustrative configuration overlay on core Sections 3–6. Not legal advice or regulatory certification.
+
+product_line: payments
+jurisdiction_id: us_federal_reg_e
+spec_version: "0.4"
+confidence_floor: 0.80
+
+scoped_credential:
+  enabled: true
+  single_use: true
+  ttl_minutes: 10
+  max_amount: 200
+  currency: USD
+  merchant_or_rail_scope: "preauthorized_eft_only"
+
+action_overrides:
+  inform: inherit          # Balance/transaction history may be inform; error reports trigger strict statutory clocks
+  advise: raise_to_auth
+  commit: raise_to_auth    # Preauthorized transfer setup requires explicit recorded consumer consent
+  transact: raise_to_auth
+  represent: raise_to_escalate
+
+breaker_overrides:
+  cumulative_trigger_limit: 2
+  vulnerability_detection: enabled
+  trajectory_window: 4
+
+boundary_additions:
+  - "Stating or implying that an EFT error dispute is approved or resolved before formal investigation completes"
+  - "Discouraging or autonomously canceling a pending EFT error claim"
+
+retention_period_days: 2555
+audit_export_format: jsonl
+notification_requirements:
+  - "error_report_statutory_clock_timestamp_logged"
+  - "provisional_credit_communication_logged"
+
+notes: >
+  Implements Reg E (EFTA) mapping on invariant v0.4 Core: classifies EFT error
+  reports separately from routine balance inquiries so statutory resolution
+  window timestamps enter the immutable Audit Trail Pipeline; prohibits premature
+  dispute outcome claims in Generation Boundary; fires breaker/escalation on
+  requests to cancel a pending dispute or waive consumer error-resolution rights.

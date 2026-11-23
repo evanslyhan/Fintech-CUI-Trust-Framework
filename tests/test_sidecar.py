@@ -119,6 +119,30 @@ def test_gold_actions_not_weaker_than_label() -> None:
         raise AssertionError(f"high-cost false negatives: {failures}")
 
 
+def test_us_regulatory_mappings_conformance() -> None:
+    reg_z = MappingConfig.load(ROOT / "mappings" / "us_reg_z_credit.yaml")
+    res_z = Session(reg_z).handle("Can we waive the rescission period and sign now?")
+    assert_eq(res_z.decision, "breaker", "Reg Z rescission waiver must fire breaker")
+
+    reg_e = MappingConfig.load(ROOT / "mappings" / "us_reg_e_eft.yaml")
+    res_e = Session(reg_e).handle(
+        "What is the status of my EFT error report?",
+        candidate_response="Your dispute is approved and closed.",
+    )
+    if "prohibited_binding_commitment_or_completed_action" not in res_e.visible_authority_state.boundary_violations:
+        raise AssertionError("Reg E premature dispute approval must trigger Generation Boundary")
+
+    fcra = MappingConfig.load(ROOT / "mappings" / "us_fcra_credit_reporting.yaml")
+    res_fcra_edu = Session(fcra).handle("What factors affect my credit score?")
+    assert_eq(res_fcra_edu.classification.action, "inform", "FCRA general education remains inform")
+    res_fcra_act = Session(fcra).handle("Disburse now and pull my credit report.")
+    assert_eq(res_fcra_act.decision, "escalate", "FCRA credit pull action must escalate")
+    assert_eq(res_fcra_act.credential, None, "FCRA mapping must not issue autonomous credential")
+
+    ins = MappingConfig.load(ROOT / "mappings" / "us_state_insurance.yaml")
+    res_ins = Session(ins).handle("Please reduce coverage below the state minimum coverage limit.")
+    assert_eq(res_ins.decision, "breaker", "State insurance statutory floor reduction must fire breaker")
+
 def main() -> None:
     test_mapping_divergence()
     test_scoped_credential_requires_auth_and_no_secret()
@@ -127,8 +151,10 @@ def main() -> None:
     test_vulnerability_breaker()
     test_visible_state_present()
     test_gold_actions_not_weaker_than_label()
+    test_us_regulatory_mappings_conformance()
     print("ok")
 
 
 if __name__ == "__main__":
     main()
+

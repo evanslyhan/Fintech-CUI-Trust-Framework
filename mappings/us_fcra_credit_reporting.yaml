@@ -1,0 +1,43 @@
+# U.S. Regulatory Mapping: Fair Credit Reporting Act (FCRA, 15 U.S.C. § 1681 et seq.)
+# Illustrative configuration overlay on core Sections 3–6. Not legal advice or regulatory certification.
+
+product_line: lending
+jurisdiction_id: us_federal_fcra
+spec_version: "0.4"
+confidence_floor: 0.80
+
+scoped_credential:
+  enabled: false           # No autonomous credit-pull credential without recorded permissible-purpose gate
+  single_use: true
+  ttl_minutes: 5
+  max_amount: 0
+  currency: USD
+  merchant_or_rail_scope: "none"
+
+action_overrides:
+  inform: inherit          # General credit education ("what affects my score") remains inform/FREE at F0/R0
+  advise: raise_to_auth
+  commit: raise_to_escalate
+  transact: raise_to_escalate   # Actions pulling/using consumer report require recorded permissible-purpose basis
+  represent: raise_to_escalate  # Adverse action determinations are never autonomously finalized
+
+breaker_overrides:
+  cumulative_trigger_limit: 2
+  vulnerability_detection: enabled
+  trajectory_window: 4
+
+boundary_additions:
+  - "Communicating a credit-report-influenced adverse decision without required FCRA adverse-action notice fields"
+  - "Initiating a consumer report pull without a recorded permissible-purpose basis"
+
+retention_period_days: 2555
+audit_export_format: jsonl
+notification_requirements:
+  - "permissible_purpose_basis_logged"
+  - "adverse_action_notice_delivery_logged"
+
+notes: >
+  Implements FCRA mapping on invariant v0.4 Core: separates general credit
+  education (inform) from consumer-report access (AUTH + permissible-purpose
+  logging); enforces adverse-action notice requirements at Generation Boundary;
+  escalates adverse-action determinations rather than finalizing them autonomously.

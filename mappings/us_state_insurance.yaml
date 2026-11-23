@@ -1,0 +1,44 @@
+# U.S. Regulatory Mapping: State Insurance Regulation (Illustrative Multi-State: CA, NY, TX)
+# Illustrative configuration overlay on core Sections 3–6. Not legal advice or regulatory certification.
+
+product_line: insurance
+jurisdiction_id: us_state_insurance_ca_ny_tx
+spec_version: "0.4"
+confidence_floor: 0.80
+
+scoped_credential:
+  enabled: true
+  single_use: true
+  ttl_minutes: 10
+  max_amount: 0
+  currency: USD
+  merchant_or_rail_scope: "state_compliant_policy_rail_only"
+
+action_overrides:
+  inform: inherit          # Routine renewal date inquiry remains inform
+  advise: raise_to_auth    # Policy replacement comparison requires state-specific comparative disclosure
+  commit: raise_to_escalate
+  transact: raise_to_escalate  # Binding policy switch or cancellation requires escalated/verified workflow
+  represent: raise_to_escalate
+
+breaker_overrides:
+  cumulative_trigger_limit: 2
+  vulnerability_detection: enabled
+  trajectory_window: 4
+
+boundary_additions:
+  - "Completed-tense policy switching claims (e.g., 'your policy has been switched') or unauthorized cancellation confirmations"
+  - "Recommendations reducing liability coverage below applicable state statutory minimum or lender lien requirement"
+
+retention_period_days: 2555
+audit_export_format: jsonl
+notification_requirements:
+  - "state_replacement_comparative_disclosure_logged"
+  - "statutory_minimum_coverage_check_logged"
+
+notes: >
+  Implements U.S. state-level insurance mapping (CA, NY, TX illustrative overlay)
+  on invariant v0.4 Core: distinguishes renewal inquiries from policy replacement;
+  prohibits completed-tense switching assertions at Generation Boundary; fires
+  Authority Circuit Breaker on requests that would reduce coverage below state
+  statutory minimums or lender-required lien thresholds.

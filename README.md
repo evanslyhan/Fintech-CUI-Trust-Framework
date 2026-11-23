@@ -4,6 +4,7 @@
 
 **Current specification:** [v0.4](./spec/protocol-spec-v0.4.md)  
 **Agentic payment extension:** [v0.4-AP — Agentic Payment & Lifecycle Resilience](./spec/agentic-payment-extension.md)  
+**U.S. regulatory mappings:** [v1.0 — Reg Z, Reg E, FCRA & State Insurance](./spec/us-regulatory-mapping.md)  
 **Prior specification:** [v0.3](./spec/protocol-spec-v0.3.md)
 
 ## What is this?
@@ -84,6 +85,10 @@ Reference mappings (not legal advice):
 - [`mappings/lending.yaml`](./mappings/lending.yaml) — Consumer lending & credit origination
 - [`mappings/insurance.yaml`](./mappings/insurance.yaml) — Insurance comparison, binding & claims
 - [`mappings/collections.yaml`](./mappings/collections.yaml) — Collections & repayment communications
+- [`mappings/us_reg_z_credit.yaml`](./mappings/us_reg_z_credit.yaml) — U.S. Truth in Lending Act (Regulation Z)
+- [`mappings/us_reg_e_eft.yaml`](./mappings/us_reg_e_eft.yaml) — U.S. Electronic Fund Transfer Act (Regulation E)
+- [`mappings/us_fcra_credit_reporting.yaml`](./mappings/us_fcra_credit_reporting.yaml) — U.S. Fair Credit Reporting Act (FCRA)
+- [`mappings/us_state_insurance.yaml`](./mappings/us_state_insurance.yaml) — U.S. State Insurance Regulation (CA, NY, TX illustrative overlay)
 
 The same utterance compiles to different authority decisions under different mappings.
 
@@ -107,14 +112,14 @@ PYTHONPATH=src python3 -m cf_gov.sidecar \
 PYTHONPATH=src python3 tests/test_sidecar.py
 ```
 
-See [`/spec/protocol-spec-v0.4.md`](./spec/protocol-spec-v0.4.md) and [`/spec/agentic-payment-extension.md`](./spec/agentic-payment-extension.md) for the normative specifications.
+See [`/spec/protocol-spec-v0.4.md`](./spec/protocol-spec-v0.4.md), [`/spec/agentic-payment-extension.md`](./spec/agentic-payment-extension.md), and [`/spec/us-regulatory-mapping.md`](./spec/us-regulatory-mapping.md) for the specifications.
 
 ## Repository Structure
 
 ```
 ├── README.md                 ← You are here
 ├── LICENSE                   ← MIT
-├── spec/                     ← Normative protocol specifications (v0.3, v0.4, v0.4-AP)
+├── spec/                     ← Normative specifications (v0.3, v0.4, v0.4-AP) & U.S. mapping reference
 ├── src/                      ← Deterministic control-plane & audit-schema validator
 ├── mappings/                 ← Configurable product-line & jurisdiction mappings
 └── tests/                    ← Classification gold standard + control-plane conformance tests

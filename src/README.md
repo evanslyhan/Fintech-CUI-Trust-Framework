@@ -41,7 +41,7 @@ python3 tests/test_sidecar.py
 - `(FCR, RS, Action)` tuple bound before any generation or execution decision
 - Classification Assurance (`confidence_floor` from the mapping)
 - Section 3.2 FREE / AUTH / ESCALATE decision table
-- Product-line action overrides (`agentic_payment`, `payments`, `lending`, `insurance`, `collections`)
+- Product-line and U.S. regulatory action overrides (`agentic_payment`, `payments`, `lending`, `insurance`, `collections`, `us_reg_z_credit`, `us_reg_e_eft`, `us_fcra_credit_reporting`, `us_state_insurance`)
 - Section 5 Generation Boundary checks (blocking unverified financial terms stated as fact, prohibited commitments, and credit upsells under financial-distress signals)
 - Post-AUTH single-use Scoped Credential issuance with `secret_material_in_model_context=false`
 - Visible Authority State in the JSON output
